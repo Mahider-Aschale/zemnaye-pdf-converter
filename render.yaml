@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: pdfconverter-backend
+    env: docker
+    plan: free
+    repo: https://github.com/Mahider-Aschale/zemnaye-pdf-converter
+    region: oregon
+    branch: main
+    rootDir: backend
+    dockerfilePath: backend/Dockerfile
+    autoDeploy: true
