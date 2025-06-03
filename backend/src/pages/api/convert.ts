@@ -3,29 +3,22 @@ import { promises as fs } from "fs";
 import path from "path";
 import { spawn } from "child_process";
 import os from "os";
-import Cors from 'micro-cors';
+import Cors from "micro-cors";
 import { IncomingMessage } from "http";
 
-// 🛡️ Setup CORS
+// Setup CORS middleware
 const cors = Cors({
   origin:
     process.env.NODE_ENV === "development"
       ? "http://localhost:3001"
-      : "zemnaye-pdf-converter.vercel.app",
-      allowMethods: ["POST", "OPTIONS"],
+      : "https://zemnaye-pdf-converter.vercel.app",
+  allowMethods: ["POST", "OPTIONS"],
 });
 
-function runMiddleware(req: NextApiRequest, res: NextApiResponse, fn: Function) {
-  return new Promise((resolve, reject) => {
-    fn(req, res, (result: any) => {
-      if (result instanceof Error) return reject(result);
-      return resolve(result);
-    });
-  });
-}
-
-// 🛠️ Parse multipart/form-data using Busboy
-function parseForm(req: IncomingMessage): Promise<{ buffer: Buffer; filename: string }> {
+// Parse multipart/form-data using Busboy
+function parseForm(
+  req: IncomingMessage
+): Promise<{ buffer: Buffer; filename: string }> {
   return new Promise((resolve, reject) => {
     const busboy = require("busboy");
     const bb = busboy({ headers: req.headers });
@@ -46,18 +39,19 @@ function parseForm(req: IncomingMessage): Promise<{ buffer: Buffer; filename: st
   });
 }
 
-// 📤 Main handler
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  await runMiddleware(req, res, cors);
+// The actual API handler
+async function handler(req: NextApiRequest, res: NextApiResponse) {
+  if (req.method === "OPTIONS") {
+    return res.status(200).end();
+  }
 
-  if (req.method === "OPTIONS") return res.status(200).end();
-  if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
+  if (req.method !== "POST") {
+    return res.status(405).json({ error: "Method not allowed" });
+  }
 
   try {
-    // 📥 Parse incoming form
     const { buffer, filename } = await parseForm(req);
 
-    // 📁 Save to temporary location
     const tempDir = path.join(os.tmpdir(), `upload-${Date.now()}`);
     await fs.mkdir(tempDir, { recursive: true });
 
@@ -66,10 +60,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     const outputFilePath = inputFilePath.replace(path.extname(filename), ".pdf");
 
-    // 🧠 LibreOffice binary path (Windows)
     const sofficePath = `"C:\\Program Files\\LibreOffice\\program\\soffice.exe"`;
 
-    // 🔄 Run conversion
     await new Promise<void>((resolve, reject) => {
       const process = spawn(
         sofficePath,
@@ -88,7 +80,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       process.on("error", reject);
     });
 
-    // 📤 Read and send back PDF
     const pdfBuffer = await fs.readFile(outputFilePath);
 
     res.setHeader("Content-Type", "application/pdf");
@@ -99,3 +90,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(500).json({ error: "Conversion failed. Please try again." });
   }
 }
+
+// ✅ Wrap with CORS and export
+export default cors(handler as any);
+
