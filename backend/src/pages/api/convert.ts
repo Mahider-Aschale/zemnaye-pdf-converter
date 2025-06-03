@@ -1,99 +1,101 @@
-// File: /app/api/convert/route.ts (Next.js 13+ App Router API Route)
+import type { NextApiRequest, NextApiResponse } from "next";
+import { promises as fs } from "fs";
+import path from "path";
+import { spawn } from "child_process";
+import os from "os";
+import Cors from 'micro-cors';
+import { IncomingMessage } from "http";
 
-import { NextRequest, NextResponse } from 'next/server';
-import { mkdirSync, readFileSync, unlinkSync } from 'fs';
-import path from 'path';
-import { spawn } from 'child_process';
-import { v4 as uuidv4 } from 'uuid';
-import formidable, { File as FormidableFile, Files } from 'formidable';
-import { promisify } from 'util';
+// 🛡️ Setup CORS
+const cors = Cors({
+  origin:
+    process.env.NODE_ENV === "development"
+      ? "http://localhost:3001"
+      : "zemnaye-pdf-converter.vercel.app",
+      allowMethods: ["POST", "OPTIONS"],
+});
 
-// ⛔ Required so Next.js doesn’t parse the request body
-export const config = {
-  api: {
-    bodyParser: false,
-  },
-};
-
-// ✅ Helper function to parse multipart/form-data using formidable
-const parseForm = async (
-  req: NextRequest
-): Promise<{ file: FormidableFile }> => {
-  const form = formidable({
-    multiples: false,
-    uploadDir: '/tmp',
-    keepExtensions: true,
-  });
-
-  // Wrap in a Promise to use with async/await
-  const [fields, files]: [formidable.Fields, formidable.Files] = await new Promise((resolve, reject) => {
-    form.parse(req as any, (err, fields, files) => {
-      if (err) reject(err);
-      else resolve([fields, files]);
+function runMiddleware(req: NextApiRequest, res: NextApiResponse, fn: Function) {
+  return new Promise((resolve, reject) => {
+    fn(req, res, (result: any) => {
+      if (result instanceof Error) return reject(result);
+      return resolve(result);
     });
   });
+}
 
-  // Handle multiple file edge cases
-  const rawFile = files.file;
-  const file = Array.isArray(rawFile) ? rawFile[0] : rawFile;
+// 🛠️ Parse multipart/form-data using Busboy
+function parseForm(req: IncomingMessage): Promise<{ buffer: Buffer; filename: string }> {
+  return new Promise((resolve, reject) => {
+    const busboy = require("busboy");
+    const bb = busboy({ headers: req.headers });
+    const chunks: Buffer[] = [];
+    let fileName = "";
 
-  if (!file || !file.filepath) {
-    throw new Error('No valid file uploaded');
-  }
+    bb.on("file", (_name: string, file: NodeJS.ReadableStream, info: { filename: string }) => {
+      fileName = info.filename;
+      file.on("data", (chunk: Buffer) => chunks.push(chunk));
+    });
 
-  return { file };
-};
+    bb.on("finish", () => {
+      resolve({ buffer: Buffer.concat(chunks), filename: fileName });
+    });
 
-// ✅ POST handler for converting uploaded files to PDF
-export async function POST(req: NextRequest) {
+    bb.on("error", reject);
+    req.pipe(bb);
+  });
+}
+
+// 📤 Main handler
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  await runMiddleware(req, res, cors);
+
+  if (req.method === "OPTIONS") return res.status(200).end();
+  if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
+
   try {
-    // 1. Parse the form to get uploaded file
-    const { file } = await parseForm(req);
-    const inputPath = file.filepath;
-    const tempDir = `/tmp/${uuidv4()}`;
-    mkdirSync(tempDir, { recursive: true });
+    // 📥 Parse incoming form
+    const { buffer, filename } = await parseForm(req);
 
-    const outputDir = tempDir;
+    // 📁 Save to temporary location
+    const tempDir = path.join(os.tmpdir(), `upload-${Date.now()}`);
+    await fs.mkdir(tempDir, { recursive: true });
 
-    // 2. Run LibreOffice CLI to convert to PDF
+    const inputFilePath = path.join(tempDir, filename);
+    await fs.writeFile(inputFilePath, buffer);
+
+    const outputFilePath = inputFilePath.replace(path.extname(filename), ".pdf");
+
+    // 🧠 LibreOffice binary path (Windows)
+    const sofficePath = `"C:\\Program Files\\LibreOffice\\program\\soffice.exe"`;
+
+    // 🔄 Run conversion
     await new Promise<void>((resolve, reject) => {
-      const libre = spawn('libreoffice', [
-        '--headless',
-        '--convert-to',
-        'pdf',
-        '--outdir',
-        outputDir,
-        inputPath,
-      ]);
+      const process = spawn(
+        sofficePath,
+        ["--headless", "--convert-to", "pdf", "--outdir", tempDir, inputFilePath],
+        { shell: true }
+      );
 
-      libre.on('close', (code) => {
+      process.stdout.on("data", (data) => console.log("stdout:", data.toString()));
+      process.stderr.on("data", (data) => console.error("stderr:", data.toString()));
+
+      process.on("exit", (code) => {
         if (code === 0) resolve();
-        else reject(new Error(`LibreOffice failed with exit code ${code}`));
+        else reject(new Error(`LibreOffice exited with code ${code}`));
       });
+
+      process.on("error", reject);
     });
 
-    // 3. Read the converted PDF file
-    const outputFileName = path.basename(inputPath).replace(/\.[^.]+$/, '.pdf');
-    const outputPath = path.join(outputDir, outputFileName);
-    const pdfBuffer = readFileSync(outputPath);
+    // 📤 Read and send back PDF
+    const pdfBuffer = await fs.readFile(outputFilePath);
 
-    // 4. Clean up temp files
-    unlinkSync(inputPath);
-    unlinkSync(outputPath);
-
-    // 5. Send the PDF buffer as response
-    return new NextResponse(pdfBuffer, {
-      status: 200,
-      headers: {
-        'Content-Type': 'application/pdf',
-        'Content-Disposition': `attachment; filename="${outputFileName}"`,
-      },
-    });
-  } catch (error: any) {
-    console.error('Error converting file:', error);
-    return new NextResponse(
-      JSON.stringify({ error: error.message || 'Conversion failed' }),
-      { status: 500 }
-    );
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="${filename.replace(/\.\w+$/, ".pdf")}"`);
+    return res.status(200).send(pdfBuffer);
+  } catch (error) {
+    console.error("Conversion Error:", error);
+    return res.status(500).json({ error: "Conversion failed. Please try again." });
   }
 }
