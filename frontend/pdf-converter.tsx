@@ -6,32 +6,31 @@ import { FileText, Presentation, Upload, UploadIcon, DownloadIcon, CheckCircle, 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
+import { UploadedFile } from './src/app/types'; // adjust path as needed
 
-interface UploadedFile {
-  id: string
-  name: string
-  size: number
-  type: string
-}
+
+
 
 export default function Home() {
   const [docxFiles, setDocxFiles] = useState<UploadedFile[]>([])
   const [pptFiles, setPptFiles] = useState<UploadedFile[]>([])
+  
+ const handleFileUpload = (files: FileList | null, fileType: "docx" | "ppt") => {
+  if (!files || files.length === 0) return;
+ 
 
-  const handleFileUpload = (files: FileList | null, fileType: "docx" | "ppt") => {
-    if (!files) return
-
-    const newFiles: UploadedFile[] = Array.from(files).map((file) => ({
-      id: Math.random().toString(36).substr(2, 9),
-      name: file.name,
-      size: file.size,
-      type: file.type,
-    }))
-
+  const uploadedFile: UploadedFile = {
+    id: crypto.randomUUID(),
+    name: files[0].name,
+    size: files[0].size,
+    type: files[0].type,
+    file: files[0]
+  };
+ 
     if (fileType === "docx") {
-      setDocxFiles((prev) => [...prev, ...newFiles])
+      setDocxFiles((prev) => [...prev, uploadedFile]);
     } else {
-      setPptFiles((prev) => [...prev, ...newFiles])
+      setPptFiles((prev) => [...prev, uploadedFile]);
     }
   }
 
@@ -74,7 +73,7 @@ export default function Home() {
             type="file"
             accept={acceptedTypes}
             multiple
-            onChange={(e) => handleFileUpload(e.target.files, fileType)}
+            onChange={(e) => handleFileUpload(e.target.files,fileType)}
             className="hidden"
             id={`${fileType}-upload`}
           />
@@ -90,6 +89,35 @@ export default function Home() {
       </div>
     </div>
   )
+  const convertFileToPDF = async (uploadedFile: UploadedFile, fileType: "docx" | "ppt") => {
+    if (!uploadedFile.file) {
+      console.error("File property missing in uploadedFile")
+      return
+    }
+  
+    const formData = new FormData()
+    formData.append("file", uploadedFile.file)
+  
+    const res = await fetch("/api/convert", {
+      method: "POST",
+      body: formData,
+    })
+  
+    if (!res.ok) {
+      alert("Conversion failed. Please try again.");
+      return
+    }
+  
+    const blob = await res.blob()
+    const url = window.URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = uploadedFile.name.replace(/\.\w+$/, ".pdf")
+    a.click()
+    
+  }
+  
+  
 
   const FileList = ({ files, fileType }: { files: UploadedFile[]; fileType: "docx" | "ppt" }) => {
     if (files.length === 0) return null
@@ -113,13 +141,14 @@ export default function Home() {
               </div>
               <div className="flex items-center gap-3">
                 <Badge variant="default">Ready</Badge>
-                <Button size="sm">
+                <Button size="sm"  onClick={() => convertFileToPDF(file, fileType)}>
                   <Download className="h-4 w-4" />
                   Download
                 </Button>
                 <Button variant="ghost" size="icon" onClick={() => removeFile(file.id, fileType)}>
                   <X className="h-4 w-4" />
                 </Button>
+               
               </div>
             </div>
           </Card>
