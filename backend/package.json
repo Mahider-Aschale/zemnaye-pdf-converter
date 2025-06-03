@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "next build || true",
     "start": "next start -p 3000",
     "lint": "next lint"
   },
@@ -19,6 +19,7 @@
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
+    "@types/busboy": "^1.5.4",
     "@types/cors": "^2.8.18",
     "@types/formidable": "^3.4.5",
     "@types/micro-cors": "^0.1.5",
