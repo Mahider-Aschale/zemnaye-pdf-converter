@@ -5,8 +5,8 @@ import { spawn } from "child_process";
 import os from "os";
 import Cors from "micro-cors";
 import { IncomingMessage } from "http";
+import Busboy from "busboy";
 
-// Setup CORS middleware
 const cors = Cors({
   origin:
     process.env.NODE_ENV === "development"
@@ -15,23 +15,19 @@ const cors = Cors({
   allowMethods: ["POST", "OPTIONS"],
 });
 
-// Parse multipart/form-data using Busboy
-function parseForm(
-  req: IncomingMessage
-): Promise<{ buffer: Buffer; filename: string }> {
+function parseForm(req: IncomingMessage): Promise<{ buffer: Buffer; filename: string }> {
   return new Promise((resolve, reject) => {
-    const busboy = require("busboy");
-    const bb = busboy({ headers: req.headers });
+    const bb = Busboy({ headers: req.headers });
     const chunks: Buffer[] = [];
-    let fileName = "";
+    let filename = "";
 
-    bb.on("file", (_name: string, file: NodeJS.ReadableStream, info: { filename: string }) => {
-      fileName = info.filename;
+    bb.on("file", (_fieldname, file, info) => {
+      filename = info.filename;
       file.on("data", (chunk: Buffer) => chunks.push(chunk));
     });
 
     bb.on("finish", () => {
-      resolve({ buffer: Buffer.concat(chunks), filename: fileName });
+      resolve({ buffer: Buffer.concat(chunks), filename });
     });
 
     bb.on("error", reject);
@@ -39,15 +35,9 @@ function parseForm(
   });
 }
 
-// The actual API handler
 async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method === "OPTIONS") {
-    return res.status(200).end();
-  }
-
-  if (req.method !== "POST") {
-    return res.status(405).json({ error: "Method not allowed" });
-  }
+  if (req.method === "OPTIONS") return res.status(200).end();
+  if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
   try {
     const { buffer, filename } = await parseForm(req);
@@ -59,7 +49,6 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     await fs.writeFile(inputFilePath, buffer);
 
     const outputFilePath = inputFilePath.replace(path.extname(filename), ".pdf");
-
     const sofficePath = `"C:\\Program Files\\LibreOffice\\program\\soffice.exe"`;
 
     await new Promise<void>((resolve, reject) => {
@@ -83,7 +72,11 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     const pdfBuffer = await fs.readFile(outputFilePath);
 
     res.setHeader("Content-Type", "application/pdf");
-    res.setHeader("Content-Disposition", `attachment; filename="${filename.replace(/\.\w+$/, ".pdf")}"`);
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="${filename.replace(/\.\w+$/, ".pdf")}"`
+    );
+
     return res.status(200).send(pdfBuffer);
   } catch (error) {
     console.error("Conversion Error:", error);
@@ -91,6 +84,6 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
   }
 }
 
-// ✅ Wrap with CORS and export
-export default cors(handler as any);
-
+// ✅ Wrap and export correctly
+const wrappedHandler = cors(handler as any);
+export default wrappedHandler;
