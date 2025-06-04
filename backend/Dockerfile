@@ -1,25 +1,23 @@
-# Use an official Node.js image
-FROM node:18
-
-# Install LibreOffice
-RUN apt-get update && apt-get install -y libreoffice
+# Use official Node.js LTS image
+FROM node:18-alpine
 
 # Set working directory
 WORKDIR /app
 
-# Copy package.json and install dependencies
+# Copy only package files to install dependencies
 COPY package*.json ./
-RUN npm install
-RUN npm run build 
 
-# Copy rest of the app
+# Install dependencies
+RUN npm install
+
+# Copy the rest of the app code
 COPY . .
 
-# Build the Next.js app (optional if you're using `app/` router or only API routes)
+# Build the Next.js project
 RUN npm run build
 
-# Expose port
+# Expose the port the app runs on
 EXPOSE 3000
 
-# Start the Next.js server
-CMD ["npm", "run", "start"]
+# Start the production server
+CMD ["npm", "start"]
