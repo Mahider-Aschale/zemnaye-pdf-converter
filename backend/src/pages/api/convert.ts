@@ -4,8 +4,8 @@ import path from "path";
 import { spawn } from "child_process";
 import os from "os";
 import Cors from "micro-cors";
-import Busboy from "busboy";
-
+import Busboy from "busboy"; 
+import { Readable } from "stream";
 
 const cors = Cors({
   origin:
@@ -22,12 +22,11 @@ type FormParseResult = {
 
 function parseForm(req: NextApiRequest): Promise<FormParseResult> {
   return new Promise((resolve, reject) => {
-    const busboy = Busboy({ headers: req.headers }) as Busboy.Busboy;
-
+    const busboy = Busboy({ headers: req.headers });
     const chunks: Buffer[] = [];
     let fileName = "";
 
-    busboy.on("file", (_name: string, file: NodeJS.ReadableStream, info: { filename: string }) => {
+    busboy.on("file", (_name: string, file: Readable, info: { filename: string; encoding: string; mimeType: string }) => {
       fileName = info.filename;
       file.on("data", (chunk: Buffer) => chunks.push(chunk));
     });
