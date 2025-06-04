@@ -4,11 +4,9 @@ import path from "path";
 import { spawn } from "child_process";
 import os from "os";
 import Cors from "micro-cors";
-import { IncomingMessage, ServerResponse } from "http";
+import Busboy from "busboy";
 
-const Busboy = require("busboy"); // ✅ Correct way to import Busboy from CommonJS
 
-// Setup CORS middleware
 const cors = Cors({
   origin:
     process.env.NODE_ENV === "development"
@@ -17,30 +15,32 @@ const cors = Cors({
   allowMethods: ["POST", "OPTIONS"],
 });
 
-// ✅ Parse multipart/form-data using Busboy
-function parseForm(
-  req: IncomingMessage
-): Promise<{ buffer: Buffer; filename: string }> {
+type FormParseResult = {
+  buffer: Buffer;
+  filename: string;
+};
+
+function parseForm(req: NextApiRequest): Promise<FormParseResult> {
   return new Promise((resolve, reject) => {
-    const bb = new Busboy({ headers: req.headers });
+    const busboy = Busboy({ headers: req.headers }) as Busboy.Busboy;
+
     const chunks: Buffer[] = [];
     let fileName = "";
 
-    bb.on("file", (_name: string, file: NodeJS.ReadableStream, info: { filename: string }) => {
+    busboy.on("file", (_name: string, file: NodeJS.ReadableStream, info: { filename: string }) => {
       fileName = info.filename;
       file.on("data", (chunk: Buffer) => chunks.push(chunk));
     });
 
-    bb.on("finish", () => {
+    busboy.on("finish", () => {
       resolve({ buffer: Buffer.concat(chunks), filename: fileName });
     });
 
-    bb.on("error", reject);
-    req.pipe(bb);
+    busboy.on("error", reject);
+    req.pipe(busboy);
   });
 }
 
-// ✅ The actual API handler
 async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method === "OPTIONS") {
     return res.status(200).end();
@@ -51,7 +51,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
   }
 
   try {
-    const { buffer, filename } = await parseForm(req as IncomingMessage);
+    const { buffer, filename } = await parseForm(req);
 
     const tempDir = path.join(os.tmpdir(), `upload-${Date.now()}`);
     await fs.mkdir(tempDir, { recursive: true });
@@ -61,10 +61,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
 
     const outputFilePath = inputFilePath.replace(path.extname(filename), ".pdf");
 
-    const sofficePath =
-      process.platform === "win32"
-        ? `"C:\\Program Files\\LibreOffice\\program\\soffice.exe"`
-        : "soffice";
+    const sofficePath = `"C:\\Program Files\\LibreOffice\\program\\soffice.exe"`; // Adjust for platform if needed
 
     await new Promise<void>((resolve, reject) => {
       const process = spawn(
@@ -73,8 +70,8 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
         { shell: true }
       );
 
-      process.stdout.on("data", (data) => console.log("LibreOffice stdout:", data.toString()));
-      process.stderr.on("data", (data) => console.error("LibreOffice stderr:", data.toString()));
+      process.stdout.on("data", (data) => console.log("stdout:", data.toString()));
+      process.stderr.on("data", (data) => console.error("stderr:", data.toString()));
 
       process.on("exit", (code) => {
         if (code === 0) resolve();
@@ -87,10 +84,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     const pdfBuffer = await fs.readFile(outputFilePath);
 
     res.setHeader("Content-Type", "application/pdf");
-    res.setHeader(
-      "Content-Disposition",
-      `attachment; filename="${filename.replace(/\.\w+$/, ".pdf")}"`
-    );
+    res.setHeader("Content-Disposition", `attachment; filename="${filename.replace(/\.\w+$/, ".pdf")}"`);
     return res.status(200).send(pdfBuffer);
   } catch (error) {
     console.error("Conversion Error:", error);
@@ -98,5 +92,6 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
   }
 }
 
-// ✅ Wrap handler with micro-cors and cast to proper types for compatibility
-export default cors((handler as unknown) as (req: IncomingMessage, res: ServerResponse) => void);
+// ✅ Wrap with micro-cors correctly
+const corsWrappedHandler = cors(handler as any);
+export default corsWrappedHandler;
