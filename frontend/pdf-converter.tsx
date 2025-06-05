@@ -6,7 +6,7 @@ import { FileText, Presentation, Upload, UploadIcon, DownloadIcon, CheckCircle, 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
-import { UploadedFile } from './src/app/types'; // adjust path as needed
+import { UploadedFile } from '@/app/types'; // adjust path as needed
 
 
 
@@ -15,25 +15,31 @@ export default function Home() {
   const [docxFiles, setDocxFiles] = useState<UploadedFile[]>([])
   const [pptFiles, setPptFiles] = useState<UploadedFile[]>([])
   
- const handleFileUpload = (files: FileList | null, fileType: "docx" | "ppt") => {
+ const handleFileUpload   = (files: FileList | null, fileType: "docx" | "ppt") => {
   if (!files || files.length === 0) return;
- 
+
+  const file = files[0];
+  const validTypes = fileType === "docx" ? ["application/vnd.openxmlformats-officedocument.wordprocessingml.document", "application/msword"] : ["application/vnd.openxmlformats-officedocument.presentationml.presentation", "application/vnd.ms-powerpoint"];
+
+  if (!validTypes.includes(file.type)) {
+    alert("Invalid file type. Please upload a valid DOCX or PPT file.");
+    return;
+  }
 
   const uploadedFile: UploadedFile = {
     id: crypto.randomUUID(),
-    name: files[0].name,
-    size: files[0].size,
-    type: files[0].type,
-    file: files[0]
+    name: file.name,
+    size: file.size,
+    type: file.type,
+    file: file,
   };
- 
-    if (fileType === "docx") {
-      setDocxFiles((prev) => [...prev, uploadedFile]);
-    } else {
-      setPptFiles((prev) => [...prev, uploadedFile]);
-    }
-  }
 
+  if (fileType === "docx") {
+    setDocxFiles((prev) => [...prev, uploadedFile]);
+  } else {
+    setPptFiles((prev) => [...prev, uploadedFile]);
+  }
+};
   const removeFile = (id: string, fileType: "docx" | "ppt") => {
     if (fileType === "docx") {
       setDocxFiles((prev) => prev.filter((file) => file.id !== id))
@@ -41,6 +47,62 @@ export default function Home() {
       setPptFiles((prev) => prev.filter((file) => file.id !== id))
     }
   }
+  const FileUploadArea = ({
+    fileType,
+    acceptedTypes,
+    title,
+    description,
+    icon: Icon,
+  }: {
+    fileType: "docx" | "ppt";
+    acceptedTypes: string;
+    title: string;
+    description: string;
+    icon: any;
+  }) => {
+    const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+      e.preventDefault();
+      const files = e.dataTransfer.files;
+      handleFileUpload(files, fileType);
+    };
+  
+    const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+      e.preventDefault();
+    };
+  
+    return (
+      <div
+        onDrop={handleDrop}
+        onDragOver={handleDragOver}
+        className="border-2 border-dashed rounded-xl p-8 text-center transition-all duration-200 border-muted-foreground/25 hover:border-primary/50 hover:bg-muted/50"
+      >
+        <div className="flex flex-col items-center gap-4">
+          <Icon className="h-12 w-12 text-primary" />
+          <div>
+            <h3 className="text-lg font-semibold mb-2">{title}</h3>
+            <p className="text-muted-foreground mb-4">{description}</p>
+            <input
+              type="file"
+              accept={acceptedTypes}
+              multiple
+              onChange={(e) => handleFileUpload(e.target.files, fileType)}
+              className="hidden"
+              id={`${fileType}-upload`}
+            />
+            <label htmlFor={`${fileType}-upload`}>
+              <Button asChild>
+                <span className="cursor-pointer">
+                  <Upload className="h-4 w-4 mr-2" />
+                  Choose Files
+                </span>
+              </Button>
+            </label>
+          </div>
+        </div>
+      </div>
+    );
+  };
+  
 
   const formatFileSize = (bytes: number) => {
     if (bytes === 0) return "0 Bytes"
@@ -50,45 +112,6 @@ export default function Home() {
     return Number.parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i]
   }
 
-  const FileUploadArea = ({
-    fileType,
-    acceptedTypes,
-    title,
-    description,
-    icon: Icon,
-  }: {
-    fileType: "docx" | "ppt"
-    acceptedTypes: string
-    title: string
-    description: string
-    icon: any
-  }) => (
-    <div className="border-2 border-dashed rounded-xl p-8 text-center transition-all duration-200 border-muted-foreground/25 hover:border-primary/50 hover:bg-muted/50">
-      <div className="flex flex-col items-center gap-4">
-        <Icon className="h-12 w-12 text-primary" />
-        <div>
-          <h3 className="text-lg font-semibold mb-2">{title}</h3>
-          <p className="text-muted-foreground mb-4">{description}</p>
-          <input
-            type="file"
-            accept={acceptedTypes}
-            multiple
-            onChange={(e) => handleFileUpload(e.target.files,fileType)}
-            className="hidden"
-            id={`${fileType}-upload`}
-          />
-          <label htmlFor={`${fileType}-upload`}>
-            <Button asChild>
-              <span className="cursor-pointer">
-                <Upload className="h-4 w-4 mr-2" />
-                Choose Files
-              </span>
-            </Button>
-          </label>
-        </div>
-      </div>
-    </div>
-  )
   const convertFileToPDF = async (uploadedFile: UploadedFile, fileType: "docx" | "ppt") => {
     if (!uploadedFile.file) {
       console.error("File property missing in uploadedFile")
@@ -97,27 +120,29 @@ export default function Home() {
   
     const formData = new FormData()
     formData.append("file", uploadedFile.file)
-  
-    const res = await fetch("https://zemnaye-pdf-converter-backend.onrender.com", {
+ 
+    const res = await fetch('NEXT_PUBLIC_API_BASE_URL', {
       method: "POST",
       body: formData,
     })
   
     if (!res.ok) {
+      const errorText = await res.text();
+      console.error(`Conversion failed: ${res.status} - ${errorText}`);
       alert("Conversion failed. Please try again.");
-      return
+      return;
     }
-  
+   
     const blob = await res.blob()
     const url = window.URL.createObjectURL(blob)
     const a = document.createElement("a")
     a.href = url
     a.download = uploadedFile.name.replace(/\.\w+$/, ".pdf")
     a.click()
-    
+    window.URL.revokeObjectURL(url);
   }
   
-  
+
 
   const FileList = ({ files, fileType }: { files: UploadedFile[]; fileType: "docx" | "ppt" }) => {
     if (files.length === 0) return null
