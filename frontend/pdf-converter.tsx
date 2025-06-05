@@ -117,29 +117,27 @@ export default function Home() {
       console.error("File property missing in uploadedFile")
       return
     }
-  
-    const formData = new FormData()
-    formData.append("file", uploadedFile.file)
- 
-    const res = await fetch(process.env.NEXT_PUBLIC_BACKEND_URL ||"https:zemnaye-pdf-converter-backend.onrender.com", {
+    const formData = new FormData();
+    formData.append("file", uploadedFile.file); // assuming `selectedFile` is from an `<input type="file" />`
+    
+    fetch("https://zemnaye-pdf-converter-backend.onrender.com/api/convert", {
       method: "POST",
       body: formData,
     })
-  
-    if (!res.ok) {
-      const errorText = await res.text();
-      console.error(`Conversion failed: ${res.status} - ${errorText}`);
-      alert("Conversion failed. Please try again.");
-      return;
-    }
-   
-    const blob = await res.blob()
-    const url = window.URL.createObjectURL(blob)
-    const a = document.createElement("a")
-    a.href = url
-    a.download = uploadedFile.name.replace(/\.\w+$/, ".pdf")
-    a.click()
-    window.URL.revokeObjectURL(url);
+      .then(async (res) => {
+        if (!res.ok) throw new Error(`${res.status} - ${await res.text()}`);
+        const blob = await res.blob();
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.setAttribute("download", "converted.pdf");
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+      })
+      .catch((err) => {
+        console.error("Conversion failed:", err);
+      });
   }
   
 
