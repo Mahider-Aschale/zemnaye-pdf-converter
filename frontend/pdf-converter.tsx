@@ -121,7 +121,7 @@ export default function Home() {
     const formData = new FormData()
     formData.append("file", uploadedFile.file)
  
-    const res = await fetch("https:zemnaye-pdf-converter-backend.onrender.com", {
+    const res = await fetch(process.env.NEXT_PUBLIC_BACKEND_URL ||"https:zemnaye-pdf-converter-backend.onrender.com", {
       method: "POST",
       body: formData,
     })
