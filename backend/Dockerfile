@@ -1,23 +1,21 @@
-# Use Node 20 with Debian
+# Use official Node 20 image
 FROM node:20-bullseye
 
-# Create app directory
+# Set working directory
 WORKDIR /app
 
-# Copy package files separately to cache dependencies
+# Copy package files and install dependencies
 COPY package*.json ./
-
-# Install dependencies
 RUN npm install
 
-# Copy rest of the app
+# Copy rest of the application
 COPY . .
 
-# Build the Next.js app
+# Build Next.js app
 RUN npm run build
 
-# Expose the default port
+# Expose the default Next.js port
 EXPOSE 3000
 
-# Start the app in production
-CMD ["npm", "run", "start"]
+# Start Next.js app
+CMD ["npm", "start"]
