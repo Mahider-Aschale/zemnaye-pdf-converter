@@ -120,27 +120,25 @@ export default function Home() {
     const formData = new FormData();
     formData.append("file", uploadedFile.file); // assuming `selectedFile` is from an `<input type="file" />`
     
-    fetch("https://zemnaye-pdf-converter-backend.onrender.com/api/convert", {
-      method: "POST",
+    const response = await fetch('https://zemnaye-pdf-converter-backend.onrender.com/api/convert', {
+      method: 'POST',
       body: formData,
-    })
-      .then(async (res) => {
-        if (!res.ok) throw new Error(`${res.status} - ${await res.text()}`);
-        const blob = await res.blob();
-        const url = window.URL.createObjectURL(blob);
-        const link = document.createElement("a");
-        link.href = url;
-        link.setAttribute("download", "converted.pdf");
-        document.body.appendChild(link);
-        link.click();
-        link.remove();
-      })
-      .catch((err) => {
-        console.error("Conversion failed:", err);
-      });
+    });
+  
+    if (!response.ok) {
+      const error = await response.json();
+      console.error('Conversion failed:', error);
+      return;
+    }
+    const blob = await response.blob();
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = 'converted.pdf';
+    link.click();
+    
+     
   }
   
-
 
   const FileList = ({ files, fileType }: { files: UploadedFile[]; fileType: "docx" | "ppt" }) => {
     if (files.length === 0) return null
