@@ -1,23 +1,23 @@
-# Use a Debian-based Node image
-FROM node:20.11.1-alpine
+# Use official Node.js 20 image
+FROM node:20-bullseye
 
-
-# Install LibreOffice + unoconv
-RUN apt-get update && \
-    apt-get install -y libreoffice unoconv && \
-    apt-get clean
-
-# Create app directory
+# Set working directory
 WORKDIR /app
 
-# Copy app files
-COPY . .
+# Copy package files first for better Docker caching
+COPY package*.json ./
 
 # Install dependencies
 RUN npm install
 
-# Expose the default Next.js port
+# Copy rest of the application files
+COPY . .
+
+# Build the Next.js app
+RUN npm run build
+
+# Expose Next.js default port
 EXPOSE 3000
 
-# Start the Next.js app
+# Start the Next.js app in production
 CMD ["npm", "run", "start"]
