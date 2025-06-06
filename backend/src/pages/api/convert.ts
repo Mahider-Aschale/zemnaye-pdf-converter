@@ -9,6 +9,7 @@ import CloudConvert from 'cloudconvert';
 import FormData from 'form-data';
 
 
+dotenvConfig();
 
 export const config = {
   api: {
