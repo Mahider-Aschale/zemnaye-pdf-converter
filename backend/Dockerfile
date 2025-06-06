@@ -1,23 +1,23 @@
-# Use official Node.js 20 image
+# Use Node 20 with Debian
 FROM node:20-bullseye
 
-# Set working directory
+# Create app directory
 WORKDIR /app
 
-# Copy package files first for better Docker caching
+# Copy package files separately to cache dependencies
 COPY package*.json ./
 
 # Install dependencies
 RUN npm install
 
-# Copy rest of the application files
+# Copy rest of the app
 COPY . .
 
 # Build the Next.js app
 RUN npm run build
 
-# Expose Next.js default port
+# Expose the default port
 EXPOSE 3000
 
-# Start the Next.js app in production
+# Start the app in production
 CMD ["npm", "run", "start"]
