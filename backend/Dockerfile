@@ -1,5 +1,6 @@
 # Use a Debian-based Node image
-FROM node:18-bullseye
+FROM node:20.11.1-alpine
+
 
 # Install LibreOffice + unoconv
 RUN apt-get update && \
