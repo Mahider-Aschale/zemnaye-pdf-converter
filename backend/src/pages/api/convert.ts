@@ -1,14 +1,14 @@
 // pages/api/convert.ts
 
 import type { NextApiRequest, NextApiResponse } from 'next';
-import formidable from 'formidable';
+import { IncomingForm } from 'formidable';
 import fs from 'fs';
 import path from 'path';
 import { config as dotenvConfig } from 'dotenv';
 import CloudConvert from 'cloudconvert';
 import FormData from 'form-data';
 
-dotenvConfig();
+
 
 export const config = {
   api: {
@@ -16,34 +16,19 @@ export const config = {
   },
 };
 
-const cloudConvert = new CloudConvert(process.env.CLOUDCONVERT_API_KEY || '');
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': process.env.NODE_ENV === 'development'
-    ?'https://zemnaye-pdf-converter.vercel.app'
-    : 'http://localhost:3000',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type',
-};
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  // Handle CORS preflight requests
-  if (req.method === 'OPTIONS') {
-    res.setHeader('Access-Control-Allow-Origin', corsHeaders['Access-Control-Allow-Origin']);
-    res.setHeader('Access-Control-Allow-Methods', corsHeaders['Access-Control-Allow-Methods']);
-    res.setHeader('Access-Control-Allow-Headers', corsHeaders['Access-Control-Allow-Headers']);
-    return res.status(204).end();
-  }
+  const cloudConvert = new CloudConvert(process.env.CLOUDCONVERT_API_KEY || '');
 
-  // Set CORS headers for actual requests
-  res.setHeader('Access-Control-Allow-Origin', corsHeaders['Access-Control-Allow-Origin']);
+  res.setHeader('Access-Control-Allow-Origin', 'https://zemnaye-pdf-converter.vercel.app');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const form = new formidable.IncomingForm({ uploadDir: '/tmp', keepExtensions: true });
-
+  const form = new IncomingForm({ uploadDir: '/tmp', keepExtensions: true });
   form.parse(req, async (err, fields, files) => {
     if (err || !files.file) {
       return res.status(400).json({ error: 'File upload failed' });
