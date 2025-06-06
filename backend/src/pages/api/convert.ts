@@ -9,7 +9,7 @@ import CloudConvert from 'cloudconvert';
 import FormData from 'form-data';
 
 
-dotenvConfig();
+
 
 export const config = {
   api: {
@@ -20,6 +20,7 @@ export const config = {
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const cloudConvert = new CloudConvert(process.env.CLOUDCONVERT_API_KEY || '');
+  console.log("CLOUDCONVERT_API_KEY:", process.env.CLOUDCONVERT_API_KEY);
 
   res.setHeader('Access-Control-Allow-Origin', 'https://zemnaye-pdf-converter.vercel.app');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
