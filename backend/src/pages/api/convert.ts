@@ -1,96 +1,104 @@
-import type { NextApiRequest, NextApiResponse } from "next";
-import { promises as fs } from "fs";
-import path from "path";
-import { spawn } from "child_process";
-import os from "os";
-import Cors from "micro-cors";
-import Busboy from "busboy"; 
-import { Readable } from "stream";
+// pages/api/convert.ts
 
-const cors = Cors({
-  origin:
-    process.env.NODE_ENV === "development"
-      ? "http://localhost:3001"
-      : "https://zemnaye-pdf-converter.vercel.app",
-  allowMethods: ["POST", "OPTIONS"],
-});
+import type { NextApiRequest, NextApiResponse } from 'next';
+import formidable from 'formidable';
+import fs from 'fs';
+import path from 'path';
+import { config as dotenvConfig } from 'dotenv';
+import CloudConvert from 'cloudconvert';
+import FormData from 'form-data';
 
-type FormParseResult = {
-  buffer: Buffer;
-  filename: string;
+dotenvConfig();
+
+export const config = {
+  api: {
+    bodyParser: false,
+  },
 };
 
-function parseForm(req: NextApiRequest): Promise<FormParseResult> {
-  return new Promise((resolve, reject) => {
-    const busboy = Busboy({ headers: req.headers });
-    const chunks: Buffer[] = [];
-    let fileName = "";
+const cloudConvert = new CloudConvert(process.env.CLOUDCONVERT_API_KEY || '');
 
-    busboy.on("file", (_name: string, file: Readable, info: { filename: string; encoding: string; mimeType: string }) => {
-      fileName = info.filename;
-      file.on("data", (chunk: Buffer) => chunks.push(chunk));
-    });
+const corsHeaders = {
+  'Access-Control-Allow-Origin': process.env.NODE_ENV === 'development'
+    ? 'http://localhost:3000'
+    : 'https://zemnaye-pdf-converter.vercel.app',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type',
+};
 
-    busboy.on("finish", () => {
-      resolve({ buffer: Buffer.concat(chunks), filename: fileName });
-    });
-
-    busboy.on("error", reject);
-    req.pipe(busboy);
-  });
-}
-
-async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method === "GET") {
-    return res.status(200).json({ message: "Use POST to convert files." });
-  }
-  
-  if (req.method !== "POST") {
-    return res.status(405).json({ error: "Method not allowed" });
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  // Handle CORS preflight requests
+  if (req.method === 'OPTIONS') {
+    res.setHeader('Access-Control-Allow-Origin', corsHeaders['Access-Control-Allow-Origin']);
+    res.setHeader('Access-Control-Allow-Methods', corsHeaders['Access-Control-Allow-Methods']);
+    res.setHeader('Access-Control-Allow-Headers', corsHeaders['Access-Control-Allow-Headers']);
+    return res.status(204).end();
   }
 
-  try {
-    const { buffer, filename } = await parseForm(req);
+  // Set CORS headers for actual requests
+  res.setHeader('Access-Control-Allow-Origin', corsHeaders['Access-Control-Allow-Origin']);
 
-    const tempDir = path.join(os.tmpdir(), `upload-${Date.now()}`);
-    await fs.mkdir(tempDir, { recursive: true });
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
 
-    const inputFilePath = path.join(tempDir, filename);
-    await fs.writeFile(inputFilePath, buffer);
+  const form = new formidable.IncomingForm({ uploadDir: '/tmp', keepExtensions: true });
 
-    const outputFilePath = inputFilePath.replace(path.extname(filename), ".pdf");
+  form.parse(req, async (err, fields, files) => {
+    if (err || !files.file) {
+      return res.status(400).json({ error: 'File upload failed' });
+    }
 
-    const sofficePath = `"C:\\Program Files\\LibreOffice\\program\\soffice.exe"`; // Adjust for platform if needed
+    const uploadedFile = Array.isArray(files.file) ? files.file[0] : files.file;
+    const inputPath = uploadedFile.filepath;
+    const fileName = path.basename(inputPath);
 
-    await new Promise<void>((resolve, reject) => {
-      const process = spawn(
-        sofficePath,
-        ["--headless", "--convert-to", "pdf", "--outdir", tempDir, inputFilePath],
-        { shell: true }
-      );
-
-      process.stdout.on("data", (data) => console.log("stdout:", data.toString()));
-      process.stderr.on("data", (data) => console.error("stderr:", data.toString()));
-
-      process.on("exit", (code) => {
-        if (code === 0) resolve();
-        else reject(new Error(`LibreOffice exited with code ${code}`));
+    try {
+      const job = await cloudConvert.jobs.create({
+        tasks: {
+          upload: { operation: 'import/upload' },
+          convert: { operation: 'convert', input: 'upload', output_format: 'pdf' },
+          export: { operation: 'export/url', input: 'convert' },
+        },
       });
 
-      process.on("error", reject);
-    });
+      const uploadTask = job.tasks?.find((t: any) => t.name === 'upload');
+      if (!uploadTask?.result?.form) {
+        return res.status(500).json({ error: 'CloudConvert upload task failed' });
+      }
 
-    const pdfBuffer = await fs.readFile(outputFilePath);
+      const { url, parameters } = uploadTask.result.form;
 
-    res.setHeader("Content-Type", "application/pdf");
-    res.setHeader("Content-Disposition", `attachment; filename="${filename.replace(/\.\w+$/, ".pdf")}"`);
-    return res.status(200).send(pdfBuffer);
-  } catch (error) {
-    console.error("Conversion Error:", error);
-    return res.status(500).json({ error: "Conversion failed. Please try again." });
-  }
+      const fileStream = fs.createReadStream(inputPath);
+      const formData = new FormData();
+      for (const [key, value] of Object.entries(parameters)) {
+        formData.append(key, value as string);
+      }
+      formData.append('file', fileStream, fileName);
+
+      await fetch(url, {
+        method: 'POST',
+        body: formData as any,
+        headers: formData.getHeaders(),
+      });
+
+      const completedJob = await cloudConvert.jobs.wait(job.id);
+      const exportTask = completedJob.tasks?.find((t: any) => t.name === 'export');
+      const file = exportTask?.result?.files?.[0];
+
+      if (!file?.url) {
+        return res.status(500).json({ error: 'Exported file not found' });
+      }
+
+      const pdfRes = await fetch(file.url);
+      const pdfBuffer = await pdfRes.arrayBuffer();
+
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', 'attachment; filename=converted.pdf');
+      res.send(Buffer.from(pdfBuffer));
+    } catch (error: any) {
+      console.error(error);
+      res.status(500).json({ error: 'Conversion failed', detail: error.message });
+    }
+  });
 }
-
-// ✅ Wrap with micro-cors correctly
-const corsWrappedHandler = cors(handler as any);
-export default corsWrappedHandler;
