@@ -120,7 +120,7 @@ export default function Home() {
     const formData = new FormData();
     formData.append("file", uploadedFile.file); // assuming `selectedFile` is from an `<input type="file" />`
     
-    const response = await fetch('https://zemnaye-pdf-converter-backend.onrender.com/api/convert', {
+    const response = await fetch('/api/convert', {
       method: 'POST',
       body: formData,
     });
