@@ -4,12 +4,8 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import { IncomingForm } from 'formidable';
 import fs from 'fs';
 import path from 'path';
-import { config as dotenvConfig } from 'dotenv';
 import CloudConvert from 'cloudconvert';
-import FormData from 'form-data';
-
-
-
+import FormData from 'form-data'; 
 
 export const config = {
   api: {
@@ -19,16 +15,28 @@ export const config = {
 
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const cloudConvert = new CloudConvert(process.env.CLOUDCONVERT_API_KEY || '');
-  console.log("CLOUDCONVERT_API_KEY:", process.env.CLOUDCONVERT_API_KEY);
+  const apiKey = process.env.CLOUDCONVERT_API_KEY;
+  if (!apiKey) {
+    return res.status(500).json({ error: 'Missing CLOUDCONVERT_API_KEY' });
+  }
+  const cloudConvert = new CloudConvert(apiKey);
+  
+ 
 
   res.setHeader('Access-Control-Allow-Origin', 'https://zemnaye-pdf-converter.vercel.app');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
+if (req.method === 'OPTIONS') {
+  // CORS preflight request - tell the browser "OK, you're allowed"
+  return res.status(200).end();
+}
+
+if (req.method !== 'POST') {
+  // Only allow POST
+  return res.status(405).json({ error: 'Method not allowed' });
+}
+
 
   const form = new IncomingForm({ uploadDir: '/tmp', keepExtensions: true });
   form.parse(req, async (err, fields, files) => {
