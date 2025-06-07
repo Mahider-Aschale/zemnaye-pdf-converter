@@ -24,9 +24,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    const { fields, files } = await parseForm(req);
+    const { files } = await parseForm(req);
 
-    // Example: Access uploaded file info (assuming single file upload)
+   
     const file = files.file; // 'file' is the field name from frontend form
 
     if (!file) {
