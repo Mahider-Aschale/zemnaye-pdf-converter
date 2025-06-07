@@ -1,15 +1,15 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import formidable from 'formidable';
+import formidable, {  Files, Fields } from 'formidable';
 
 export const config = {
   api: {
-    bodyParser: false, // important to disable Next.js default body parser for formidable to work
+    bodyParser: false,
   },
 };
 
-// Wrap formidable's parse function into a Promise for async/await usage
-const parseForm = (req: NextApiRequest): Promise<{ fields: formidable.Fields; files: formidable.Files }> => {
-  const form = new formidable.IncomingForm();
+// Helper to parse the form data using formidable
+const parseForm = (req: NextApiRequest): Promise<{ fields: Fields; files: Files }> => {
+  const form = formidable({ multiples: false });
   return new Promise((resolve, reject) => {
     form.parse(req, (err, fields, files) => {
       if (err) reject(err);
@@ -25,22 +25,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   try {
     const { files } = await parseForm(req);
+    const fileData = files.file;
 
-   
-    const file = files.file; // 'file' is the field name from frontend form
-
-    if (!file) {
+    if (!fileData) {
       return res.status(400).json({ error: 'No file uploaded' });
     }
 
-    // Handle file depending on whether it's single or multiple
-    // formidable's file can be File | File[]
-    const uploadedFile = Array.isArray(file) ? file[0] : file;
+    const uploadedFile = Array.isArray(fileData) ? fileData[0] : fileData;
 
-    // You can access properties like:
-    // uploadedFile.filepath (string), uploadedFile.mimetype (string), uploadedFile.originalFilename (string)
-
-    // Example: Just return file info
     return res.status(200).json({
       filename: uploadedFile.originalFilename,
       mimetype: uploadedFile.mimetype,
