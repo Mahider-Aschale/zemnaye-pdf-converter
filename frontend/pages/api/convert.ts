@@ -1,5 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import formidable, {  Files, Fields } from 'formidable';
+import formidable, { Files, Fields } from 'formidable';
+import path from 'path';
+import https from 'https';
 
 export const config = {
   api: {
@@ -7,9 +9,10 @@ export const config = {
   },
 };
 
-// Helper to parse the form data using formidable
+// Parse form with formidable
 const parseForm = (req: NextApiRequest): Promise<{ fields: Fields; files: Files }> => {
-  const form = formidable({ multiples: false });
+  const form = formidable({ multiples: false, uploadDir: path.join(process.cwd(), 'public', 'uploads'), keepExtensions: true });
+
   return new Promise((resolve, reject) => {
     form.parse(req, (err, fields, files) => {
       if (err) reject(err);
@@ -18,6 +21,25 @@ const parseForm = (req: NextApiRequest): Promise<{ fields: Fields; files: Files 
   });
 };
 
+// Convert to PDF using ApiFlash
+const convertToPDF = async (fileUrl: string): Promise<Buffer> => {
+  const apiKey = process.env.APIFLASH_API_KEY;
+  if (!apiKey) throw new Error('Missing APIFLASH_API_KEY');
+
+  const apiUrl = `https://api.apiflash.com/v1/urltoimage?access_key=${apiKey}&format=pdf&response_type=image&url=${encodeURIComponent(fileUrl)}`;
+
+  return new Promise((resolve, reject) => {
+    https.get(apiUrl, (res) => {
+      if (res.statusCode !== 200) return reject(new Error(`Failed to fetch PDF: ${res.statusCode}`));
+
+      const chunks: Buffer[] = [];
+      res.on('data', (chunk) => chunks.push(chunk));
+      res.on('end', () => resolve(Buffer.concat(chunks)));
+    }).on('error', (err) => reject(err));
+  });
+};
+
+// Main handler
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
@@ -25,21 +47,23 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   try {
     const { files } = await parseForm(req);
-    const fileData = files.file;
+    const file = files.file;
 
-    if (!fileData) {
+    if (!file) {
       return res.status(400).json({ error: 'No file uploaded' });
     }
 
-    const uploadedFile = Array.isArray(fileData) ? fileData[0] : fileData;
+    const uploaded = Array.isArray(file) ? file[0] : file;
+    const filename = path.basename(uploaded.filepath);
+    const fileUrl = `https://${req.headers.host}/uploads/${filename}`; 
 
-    return res.status(200).json({
-      filename: uploadedFile.originalFilename,
-      mimetype: uploadedFile.mimetype,
-      filepath: uploadedFile.filepath,
-    });
+    const pdfBuffer = await convertToPDF(fileUrl);
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename=converted.pdf`);
+    return res.send(pdfBuffer);
   } catch (error) {
-    console.error('Error parsing form:', error);
+    console.error('Conversion error:', error);
     return res.status(500).json({ error: 'Internal Server Error' });
   }
 }
