@@ -32,7 +32,7 @@ const convertToPDF = async (fileUrl: string): Promise<Buffer> => {
   return new Promise((resolve, reject) => {
     https.get(apiUrl, (res) => {
       if (res.statusCode !== 200) {
-        let msg = `Failed to fetch PDF. Status code: ${res.statusCode}`;
+        const msg = `Failed to fetch PDF. Status code: ${res.statusCode}`;
         res.resume(); // Consume response to free memory
         return reject(new Error(msg));
       }
