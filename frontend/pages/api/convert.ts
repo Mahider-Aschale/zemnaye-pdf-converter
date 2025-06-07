@@ -44,8 +44,8 @@ const handler = async (req: NextApiRequest, res: NextApiResponse) => {
       return res.status(400).json({ error: 'Only DOCX and PPTX files are allowed' });
     }
 
-    // 👉 You can insert your file conversion logic here
-    // Example (mock response):
+    // You can insert your file conversion logic here
+   
     const convertedFilename = originalFilename.replace(/\.(docx|pptx)$/i, '.pdf');
     const downloadUrl = `/downloads/${convertedFilename}`;
 
