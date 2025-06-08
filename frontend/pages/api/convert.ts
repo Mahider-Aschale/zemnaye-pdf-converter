@@ -1,7 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import formidable, { Files, Fields } from 'formidable';
-import path from 'path';
-
+import { Readable } from 'stream';
 
 export const config = {
   api: {
@@ -9,9 +8,25 @@ export const config = {
   },
 };
 
-// Parse form with formidable
+// Parse form data from incoming request
 const parseForm = (req: NextApiRequest): Promise<{ fields: Fields; files: Files }> => {
-  const form = formidable({ multiples: false, uploadDir: path.join(process.cwd(), 'public', 'uploads'), keepExtensions: true });
+  const form = formidable({
+    multiples: false,
+    keepExtensions: true,
+    fileWriteStreamHandler: () => {
+      // Prevent writing to disk by returning a null stream that buffers data
+      const chunks: any[] = [];
+      const writable = new WritableStream({
+        write(chunk) {
+          chunks.push(chunk);
+        },
+        close() {
+          // no-op
+        }
+      });
+      return writable as any;
+    },
+  });
 
   return new Promise((resolve, reject) => {
     form.parse(req, (err, fields, files) => {
@@ -21,21 +36,18 @@ const parseForm = (req: NextApiRequest): Promise<{ fields: Fields; files: Files 
   });
 };
 
-
-// Convert to PDF using ApiFlash
-const convertToPDF = async (fileUrl: string): Promise<Buffer> => {
-  const previewUrl = `https://zemnaye-pdf-converter-two.vercel.app/preview?name=${fileUrl}`;
+// Use ApiFlash to generate a screenshot-based PDF
+const convertToPDF = async (previewUrl: string): Promise<Buffer> => {
   const apiKey = process.env.APIFLASH_API_KEY;
   if (!apiKey) throw new Error('Missing APIFLASH_API_KEY');
 
   const screenshotUrl = `https://api.apiflash.com/v1/urltoimage?access_key=${apiKey}&url=${encodeURIComponent(previewUrl)}&format=pdf&response_type=image`;
   const response = await fetch(screenshotUrl);
-  if (!response.ok) throw new Error('Conversion failed');
+
+  if (!response.ok) throw new Error('PDF conversion failed');
   return Buffer.from(await response.arrayBuffer());
- 
 };
 
-// Main handler
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
@@ -49,17 +61,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(400).json({ error: 'No file uploaded' });
     }
 
-    const uploaded = Array.isArray(file) ? file[0] : file;
-    const filename = path.basename(uploaded.filepath);
-    const fileUrl = `https://${req.headers.host}/uploads/${filename}`; // Vercel will serve this
-
-    const pdfBuffer = await convertToPDF(fileUrl);
+    // 👇 Dummy preview URL - this part needs to be adjusted if you're not hosting previews
+    const previewUrl = `https://zemnaye-pdf-converter-two.vercel.app/preview?name=dummy-preview`; // Replace with real one if needed
+    const pdfBuffer = await convertToPDF(previewUrl);
 
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename=converted.pdf`);
     return res.send(pdfBuffer);
   } catch (error) {
-    console.error('Conversion error:', error instanceof Error ? error.message : error);
+    console.error('Conversion error:', error);
     return res.status(500).json({ error: 'Internal Server Error' });
   }
 }
