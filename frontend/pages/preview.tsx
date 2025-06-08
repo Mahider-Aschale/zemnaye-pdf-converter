@@ -1,28 +1,31 @@
-import type { NextApiRequest, NextApiResponse } from 'next';
+import { NextApiRequest, NextApiResponse } from 'next';
 import path from 'path';
-import fs from 'fs/promises';
+import fs from 'fs-extra'; // ✅ use fs-extra instead of 'fs/promises'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const { name } = req.query;
 
   if (!name || typeof name !== 'string') {
-    return res.status(400).json({ error: 'Missing or invalid file name' });
+    return res.status(400).json({ error: 'Missing or invalid name parameter' });
   }
 
   try {
-    const filePath = path.join('/tmp', name); // Only read from Vercel’s writable /tmp
-    const fileData = await fs.readFile(filePath);
-    const fileExt = path.extname(name).toLowerCase();
+    const filePath = path.join(process.cwd(), 'public', 'uploads', path.basename(name));
+    const fileBuffer = await fs.readFile(filePath); // ✅ works like fs.promises.readFile
+    const fileExt = path.extname(filePath).toLowerCase();
 
-    let contentType = 'application/octet-stream';
-    if (fileExt === '.docx') contentType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
-    else if (fileExt === '.pptx') contentType = 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
+    if (fileExt === '.docx') {
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+    } else if (fileExt === '.pptx') {
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.presentationml.presentation');
+    } else {
+      res.setHeader('Content-Type', 'application/octet-stream');
+    }
 
-    res.setHeader('Content-Type', contentType);
-    res.setHeader('Content-Disposition', `inline; filename="${name}"`);
-    res.send(fileData);
+    res.setHeader('Content-Disposition', `inline; filename="${path.basename(filePath)}"`);
+    return res.send(fileBuffer);
   } catch (error) {
     console.error('Preview error:', error);
-    res.status(404).json({ error: 'File not found' });
+    return res.status(500).json({ error: 'Failed to load file' });
   }
 }
