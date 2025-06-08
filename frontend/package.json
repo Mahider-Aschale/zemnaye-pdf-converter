@@ -8,6 +8,9 @@
     "start": "next start",
     "lint": "next lint"
   },
+  "engines": {
+    "node": "18.x"
+  },
   "dependencies": {
     "@radix-ui/react-progress": "^1.1.7",
     "@radix-ui/react-slot": "^1.2.3",
@@ -26,6 +29,7 @@
     "tailwind-merge": "^3.3.0",
     "tailwindcss-animate": "^1.0.7"
   },
+
   "devDependencies": {
     "@eslint/eslintrc": "^3",
     "@types/formidable": "^3.4.5",
