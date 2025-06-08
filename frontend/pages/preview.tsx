@@ -1,31 +1,28 @@
+import type { NextApiRequest, NextApiResponse } from 'next';
+import path from 'path';
+import fs from 'fs/promises';
 
-// pages/preview.tsx
-'use client';
-import { useRouter } from 'next/router';
-import { useEffect, useState } from 'react';
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  const { name } = req.query;
 
-export default function PreviewPage() {
-  const router = useRouter();
-  const { name } = router.query;
-  const [fileUrl, setFileUrl] = useState<string | null>(null);
+  if (!name || typeof name !== 'string') {
+    return res.status(400).json({ error: 'Missing or invalid file name' });
+  }
 
-  useEffect(() => {
-    if (name) {
-      const url = `/uploads/${name}`;
-      setFileUrl(url);
-    }
-  }, [name]);
+  try {
+    const filePath = path.join('/tmp', name); // Only read from Vercel’s writable /tmp
+    const fileData = await fs.readFile(filePath);
+    const fileExt = path.extname(name).toLowerCase();
 
-  if (!fileUrl) return <p>Loading preview...</p>;
+    let contentType = 'application/octet-stream';
+    if (fileExt === '.docx') contentType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+    else if (fileExt === '.pptx') contentType = 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
 
-  return (
-    <div style={{ padding: '2rem' }}>
-      <h1>Document Preview</h1>
-      <iframe
-        src={`https://docs.google.com/gview?url=${process.env.NEXT_PUBLIC_BASE_URL}${fileUrl}&embedded=true`}
-        style={{ width: '100%', height: '600px' }}
-        frameBorder="0"
-      />
-    </div>
-  );
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Content-Disposition', `inline; filename="${name}"`);
+    res.send(fileData);
+  } catch (error) {
+    console.error('Preview error:', error);
+    res.status(404).json({ error: 'File not found' });
+  }
 }
