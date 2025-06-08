@@ -24,23 +24,15 @@ const parseForm = (req: NextApiRequest): Promise<{ fields: Fields; files: Files 
 
 // Convert to PDF using ApiFlash
 const convertToPDF = async (fileUrl: string): Promise<Buffer> => {
+  const previewUrl = `https://zemnaye-pdf-converter-two.vercel.app/preview?name=${fileUrl}`;
   const apiKey = process.env.APIFLASH_API_KEY;
   if (!apiKey) throw new Error('Missing APIFLASH_API_KEY');
 
-  const apiUrl = `https://api.apiflash.com/v1/urltoimage?access_key=${apiKey}&format=pdf&response_type=image&url=${encodeURIComponent(fileUrl)}`;
-
-  return new Promise((resolve, reject) => {
-    https.get(apiUrl, (res) => {
-      if (res.statusCode !== 200) {
-        const msg = `Failed to fetch PDF. Status code: ${res.statusCode}`;
-        res.resume(); // Consume response to free memory
-        return reject(new Error(msg));
-      }
-      const chunks: Buffer[] = [];
-      res.on('data', (chunk) => chunks.push(chunk));
-      res.on('end', () => resolve(Buffer.concat(chunks)));
-    }).on('error', (err) => reject(err));
-  });
+  const screenshotUrl = `https://api.apiflash.com/v1/urltoimage?access_key=${apiKey}&url=${encodeURIComponent(previewUrl)}&format=pdf&response_type=image`;
+  const response = await fetch(screenshotUrl);
+  if (!response.ok) throw new Error('Conversion failed');
+  return Buffer.from(await response.arrayBuffer());
+ 
 };
 
 // Main handler
