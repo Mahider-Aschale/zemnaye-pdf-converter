@@ -3,6 +3,8 @@ import formidable, { File } from 'formidable';
 import fs from 'fs';
 import axios from 'axios';
 import FormData from 'form-data';
+import CloudConvert from 'cloudconvert';
+
 
 export const config = {
   api: {
@@ -58,31 +60,39 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     await axios.post(uploadUrl, formData, {
       headers: formData.getHeaders(),
     });
+    const apiKey = process.env.CLOUDCONVERT_API_KEY;
+       if(!apiKey){
+  throw new Error('Missing CLOUDCONVERT_API_KEY environment variable');
+                 }
 
-    // Step 3: Convert uploaded file
-    const convertRes = await axios.post(
-      'https://api.cloudconvert.com/v2/convert',
-      {
-        input_format: 'docx',
-        output_format: 'pdf',
-        engine: 'office',
-        input: 'import/upload',
-        file: uploadTask.id,
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${process.env.CLOUDCONVERT_API_KEY}`,
+    const cloudConvert = new CloudConvert(apiKey);
+
+    const job = await cloudConvert.jobs.create({
+      tasks: {
+        'import-my-file': {
+          operation: 'import/upload'
         },
+        'convert-my-file': {
+          operation: 'convert',
+          input: 'import-my-file',  // Link to import task ID
+          input_format: 'docx',
+          output_format: 'pdf',
+          engine: 'office'
+        },
+        'export-my-file': {
+          operation: 'export/url',
+          input: 'convert-my-file'
+        }
       }
-    );
-
-    const convertTask = convertRes.data.data;
+    });
+    
+    
 
     // Step 4: Wait for conversion to finish
     let finishedTask;
     for (let i = 0; i < 15; i++) {
       const status = await axios.get(
-        `https://api.cloudconvert.com/v2/tasks/${convertTask.id}`,
+        `https://api.cloudconvert.com/v2/tasks/${job.id}`,
         {
           headers: {
             Authorization: `Bearer ${process.env.CLOUDCONVERT_API_KEY}`,
