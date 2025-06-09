@@ -25,38 +25,96 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
+  const apiKey = process.env.CLOUDCONVERT_API_KEY;
+  if (!apiKey) {
+    return res.status(500).json({ error: 'Missing CloudConvert API key' });
+  }
+
   try {
     const { file } = await parseForm(req);
     const fileStream = fs.createReadStream(file.filepath);
 
-    const form = new FormData();
-    form.append('file', fileStream, file.originalFilename || '');
-
-
-    const cloudConvertResponse = await axios.post(
-      'https://api.cloudconvert.com/v2/convert',
-      {
-        "input_format": "docx", // or pptx
-        "output_format": "pdf",
-        "engine": "office",
-        "file": form,
-      },
+    // 1. Create import/upload task
+    const importTask = await axios.post(
+      'https://api.cloudconvert.com/v2/import/upload',
+      {},
       {
         headers: {
-          Authorization: `Bearer CLOUDCONVERT_API_KEY`, // Replace this
-          ...form.getHeaders(),
+          Authorization: `Bearer ${apiKey}`,
         },
       }
     );
 
-    // Handle response or stream back the result URL
-    const resultUrl = cloudConvertResponse.data.data.result.url;
-    res.status(200).json({ downloadUrl: resultUrl });
+    const uploadUrl = importTask.data.data.result.form.url;
+    const uploadParams = importTask.data.data.result.form.parameters;
+
+    // 2. Upload file to S3
+    const formData = new FormData();
+    for (const [key, value] of Object.entries(uploadParams)) {
+      formData.append(key, value);
+    }
+    formData.append('file', fileStream, file.originalFilename || 'upload.docx');
+
+    await axios.post(uploadUrl, formData, {
+      headers: {
+        ...formData.getHeaders(),
+      },
+    });
+
+    // 3. Create convert task
+    const convertTask = await axios.post(
+      'https://api.cloudconvert.com/v2/convert',
+      {
+        input: 'upload',
+        input_format: 'docx', // or 'pptx'
+        output_format: 'pdf',
+        engine: 'office',
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+        },
+      }
+    );
+
+    const jobId = convertTask.data.data.job_id;
+
+    // 4. Wait for job to finish
+    let jobStatus;
+    let retries = 0;
+
+    while (retries < 10) {
+      const jobResponse = await axios.get(`https://api.cloudconvert.com/v2/jobs/${jobId}`, {
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+        },
+      });
+
+      jobStatus = jobResponse.data.data.status;
+      if (jobStatus === 'finished') break;
+
+      await new Promise((r) => setTimeout(r, 2000));
+      retries++;
+    }
+
+    if (jobStatus !== 'finished') {
+      return res.status(500).json({ error: 'Conversion job did not finish' });
+    }
+
+    // 5. Get export URL
+    const exportJob = await axios.get(`https://api.cloudconvert.com/v2/jobs/${jobId}`, {
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+      },
+    });
+
+    const exportTask = exportJob.data.data.tasks.find((task: any) => task.name === 'export-url');
+
+    const fileUrl = exportTask.result.files[0].url;
+    return res.status(200).json({ downloadUrl: fileUrl });
 
   } catch (error) {
     console.error('CloudConvert error:', error);
-    res.status(500).json({ error: 'Conversion failed' });
+    return res.status(500).json({ error: 'Conversion failed' });
   }
 }
-
-
