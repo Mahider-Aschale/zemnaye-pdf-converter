@@ -1,8 +1,8 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import formidable, { Files, Fields } from 'formidable';
-import path from 'path';
-
-
+import formidable, { File } from 'formidable';
+import fs from 'fs';
+import axios from 'axios';
+import FormData from 'form-data';
 
 export const config = {
   api: {
@@ -10,72 +10,53 @@ export const config = {
   },
 };
 
-// Parse form with formidable
-const parseForm = (req: NextApiRequest): Promise<{ fields: Fields; files: Files }> => {
-  const form = formidable({
-    multiples: false,
-    uploadDir: '/tmp', // ✅ Vercel’s writable directory
-    keepExtensions: true,
-  });
-
+const parseForm = (req: NextApiRequest): Promise<{ file: File }> => {
+  const form = formidable({ multiples: false });
   return new Promise((resolve, reject) => {
     form.parse(req, (err, fields, files) => {
-      if (err) reject(err);
-      else resolve({ fields, files });
+      if (err || !files.file) reject('File parsing error');
+      else resolve({ file: Array.isArray(files.file) ? files.file[0] : files.file });
     });
   });
 };
 
-// Convert to PDF using ApiFlash
-const convertToPDF = async (previewUrl: string): Promise<Buffer> => {
-  const apiKey = process.env.APIFLASH_API_KEY;
-  if (!apiKey) {
-    console.error('Missing APIFLASH_API_KEY');
-    throw new Error('Missing API key');
-  }
-  const screenshotUrl = `https://api.apiflash.com/v1/urltoimage?access_key=${apiKey}&url=${encodeURIComponent(previewUrl)}`;
-  console.log("ApiFlash request URL:", screenshotUrl);
-  
-  const response = await fetch(screenshotUrl);
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    console.error('ApiFlash error response:', errorText);
-    throw new Error('Conversion failed');
-  }
-  return Buffer.from(await response.arrayBuffer());
-};
-
-// Main handler
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
   try {
-    const { files } = await parseForm(req);
-    const file = files.file;
-    
-    if (!file) {
-      return res.status(400).json({ error: 'No file uploaded' });
-    }
+    const { file } = await parseForm(req);
+    const fileStream = fs.createReadStream(file.filepath);
 
-    const uploaded = Array.isArray(file) ? file[0] : file;
-    const filename = path.basename(uploaded.filepath);
+    const form = new FormData();
+    form.append('file', fileStream, file.originalFilename || '');
 
-    
 
-   const host = req.headers.host ; 
-   const protocol = req.headers['x-forwarded-proto'] || 'https';
-   const previewUrl = `${protocol}://${host}/api/preview?file=${encodeURIComponent(filename)}`;
+    const cloudConvertResponse = await axios.post(
+      'https://api.cloudconvert.com/v2/convert',
+      {
+        "input_format": "docx", // or pptx
+        "output_format": "pdf",
+        "engine": "office",
+        "file": form,
+      },
+      {
+        headers: {
+          Authorization: `Bearer CLOUDCONVERT_API_KEY`, // Replace this
+          ...form.getHeaders(),
+        },
+      }
+    );
 
-    const pdfBuffer = await convertToPDF(previewUrl);
+    // Handle response or stream back the result URL
+    const resultUrl = cloudConvertResponse.data.data.result.url;
+    res.status(200).json({ downloadUrl: resultUrl });
 
-    res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename=converted.pdf`);
-    return res.send(pdfBuffer);
   } catch (error) {
-    console.error('Conversion error:', error instanceof Error ? error.message : error);
-    return res.status(500).json({ error: 'Internal Server Error' });
+    console.error('CloudConvert error:', error);
+    res.status(500).json({ error: 'Conversion failed' });
   }
 }
+
+
