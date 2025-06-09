@@ -5,17 +5,17 @@ import path from 'path';
 import fs from 'fs/promises';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const { name } = req.query;
+  const { file } = req.query;
 
-  if (typeof name !== 'string') {
+  if (typeof file !== 'string') {
     return res.status(400).json({ error: 'Invalid filename' });
   }
 
   try {
-    const filePath = path.join(process.cwd(), 'public', 'uploads', name);
+    const filePath = path.join('/tmp', file); // ✅ Changed to /tmp for Vercel compatibility
     const fileData = await fs.readFile(filePath);
 
-    const ext = path.extname(name).toLowerCase();
+    const ext = path.extname(file).toLowerCase();
     const mimeTypes: Record<string, string> = {
       '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
       '.pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
