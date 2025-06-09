@@ -31,10 +31,15 @@ const convertToPDF = async (previewUrl: string): Promise<Buffer> => {
   const apiKey = process.env.APIFLASH_API_KEY;
   if (!apiKey) throw new Error('Missing APIFLASH_API_KEY');
 
-  const screenshotUrl = `https://api.apiflash.com/v1/urltoimage?access_key=${apiKey}&url=${encodeURIComponent(previewUrl)}&format=pdf&response_type=image`;
-  const response = await fetch(screenshotUrl);
-  if (!response.ok) throw new Error('Conversion failed');
+  const screenshotUrl =`https://api.apiflash.com/v1/urltoimage?access_key=${apiKey}&url=${encodeURIComponent(previewUrl)}&format=pdf&response_type=pdf`;
 
+  const response = await fetch(screenshotUrl);
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error('ApiFlash error response:', errorText);
+    throw new Error('Conversion failed');
+  }
   return Buffer.from(await response.arrayBuffer());
 };
 
@@ -58,7 +63,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     
 
    const host = req.headers.host ; 
-   const protocol = req.headers['x-forwarded-proto'] || 'http';
+   const protocol = req.headers['x-forwarded-proto'] || 'https';
    const previewUrl = `${protocol}://${host}/api/preview?file=${encodeURIComponent(filename)}`;
 
     const pdfBuffer = await convertToPDF(previewUrl);
