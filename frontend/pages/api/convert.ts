@@ -3,6 +3,7 @@ import formidable, { Files, Fields } from 'formidable';
 import path from 'path';
 
 
+
 export const config = {
   api: {
     bodyParser: false,
@@ -46,7 +47,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   try {
     const { files } = await parseForm(req);
     const file = files.file;
-
+    
     if (!file) {
       return res.status(400).json({ error: 'No file uploaded' });
     }
@@ -54,8 +55,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const uploaded = Array.isArray(file) ? file[0] : file;
     const filename = path.basename(uploaded.filepath);
 
-    // 🧠 Read the file to base64 or serve it in a preview route
-    const previewUrl = `https://zemnaye-pdf-converter-two.vercel.app/api/preview?name=${filename}`;
+    
+
+   const host = req.headers.host ; 
+   const protocol = req.headers['x-forwarded-proto'] || 'http';
+   const previewUrl = `${protocol}://${host}/api/preview?file=${encodeURIComponent(filename)}`;
 
     const pdfBuffer = await convertToPDF(previewUrl);
 
