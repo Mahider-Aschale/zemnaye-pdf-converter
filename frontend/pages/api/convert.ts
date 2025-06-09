@@ -29,9 +29,11 @@ const parseForm = (req: NextApiRequest): Promise<{ fields: Fields; files: Files 
 // Convert to PDF using ApiFlash
 const convertToPDF = async (previewUrl: string): Promise<Buffer> => {
   const apiKey = process.env.APIFLASH_API_KEY;
-  if (!apiKey) throw new Error('Missing APIFLASH_API_KEY');
-
-  const screenshotUrl =`https://api.apiflash.com/v1/urltoimage?access_key=${apiKey}&url=${encodeURIComponent(previewUrl)}&format=pdf&response_type=pdf`;
+  if (!apiKey) {
+    console.error('Missing APIFLASH_API_KEY');
+    throw new Error('Missing API key');
+  }
+  const screenshotUrl = `https://api.apiflash.com/v1/urltoimage?access_key=${apiKey}&url=${encodeURIComponent(previewUrl)}`;
   console.log("ApiFlash request URL:", screenshotUrl);
   
   const response = await fetch(screenshotUrl);
