@@ -118,8 +118,11 @@ export default function Home() {
       return
     }
     const formData = new FormData();
-    formData.append("file", uploadedFile.file); // assuming `selectedFile` is from an `<input type="file" />`
-    
+    formData.append("file", uploadedFile.file);
+    formData.append("fileType", fileType); 
+      
+  try {
+
     const response = await fetch('/api/convert', {
       method: 'POST',
       body: formData,
@@ -128,17 +131,24 @@ export default function Home() {
     if (!response.ok) {
       const error = await response.json();
       console.error('Conversion failed:', error);
+      alert("Conversion failed: " + (error.message || "Unknown error"));
       return;
     }
     const blob = await response.blob();
     const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
+    const url = URL.createObjectURL(blob);
+    link.href = url;
     link.download = 'converted.pdf';
+    document.body.appendChild(link);  // Append for Firefox support
     link.click();
-    
-     
+    link.remove();
+    URL.revokeObjectURL(url);  // Free memory
+
+  } catch (err) {
+    console.error("Error during conversion:", err);
+    alert("An error occurred during conversion. Please try again.");
   }
-  
+}; 
 
   const FileList = ({ files, fileType }: { files: UploadedFile[]; fileType: "docx" | "ppt" }) => {
     if (files.length === 0) return null
