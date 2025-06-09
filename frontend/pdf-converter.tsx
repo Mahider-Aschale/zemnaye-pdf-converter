@@ -129,9 +129,9 @@ export default function Home() {
     });
   
     if (!response.ok) {
-      const error = await response.json();
+      const error = await response.text();
       console.error('Conversion failed:', error);
-      alert("Conversion failed: " + (error.message || "Unknown error"));
+      throw new Error('Conversion failed');
       return;
     }
     const blob = await response.blob();
