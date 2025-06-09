@@ -32,7 +32,8 @@ const convertToPDF = async (previewUrl: string): Promise<Buffer> => {
   if (!apiKey) throw new Error('Missing APIFLASH_API_KEY');
 
   const screenshotUrl =`https://api.apiflash.com/v1/urltoimage?access_key=${apiKey}&url=${encodeURIComponent(previewUrl)}&format=pdf&response_type=pdf`;
-
+  console.log("ApiFlash request URL:", screenshotUrl);
+  
   const response = await fetch(screenshotUrl);
 
   if (!response.ok) {
