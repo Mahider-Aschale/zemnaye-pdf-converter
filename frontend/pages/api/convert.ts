@@ -113,8 +113,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const fileUrl = exportTask.result.files[0].url;
     return res.status(200).json({ downloadUrl: fileUrl });
 
-  } catch (error) {
-    console.error('CloudConvert error:', error);
-    return res.status(500).json({ error: 'Conversion failed' });
+  } 
+  catch (error: any) {
+    console.error('CloudConvert error:', error.response?.data || error.message || error);
+    return res.status(500).json({ error: error.response?.data || error.message || 'Conversion failed' });
   }
+  
 }
