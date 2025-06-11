@@ -139,7 +139,10 @@ export default function Home() {
     const link = document.createElement('a');
     const url = URL.createObjectURL(blob);
     link.href = url;
-    link.download = 'converted.pdf';
+    const originalName = uploadedFile.name;
+    const baseName = originalName.replace(/\.[^/.]+$/, '');
+    link.download = `${baseName}.pdf`;
+    
     document.body.appendChild(link);  // Append for Firefox support
     link.click();
     link.remove();
