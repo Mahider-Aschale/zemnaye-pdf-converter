@@ -1,15 +1,17 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import formidable, { File } from 'formidable';
 import fs from 'fs';
-import axios from 'axios';
 import FormData from 'form-data';
+import axios from 'axios';
 
+// Disable Next.js default body parsing to handle multipart/form-data
 export const config = {
   api: {
     bodyParser: false,
   },
 };
 
+// Helper to parse form data
 const parseForm = (req: NextApiRequest): Promise<{ file: File }> => {
   const form = formidable({ multiples: false });
   return new Promise((resolve, reject) => {
@@ -21,6 +23,16 @@ const parseForm = (req: NextApiRequest): Promise<{ file: File }> => {
 };
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  // CORS headers for cross-origin requests
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+  // Respond to preflight requests
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
@@ -35,16 +47,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     const formData = new FormData();
-    
-    // ✅ MUST be "File" (capital F) or ConvertAPI will reject it
     formData.append('File', fs.createReadStream(file.filepath), file.originalFilename || 'upload');
 
     const secret = process.env.CONVERT_API_SECRET;
     if (!secret) throw new Error('Missing ConvertAPI secret key');
 
     const url = `https://v2.convertapi.com/convert/${fileExt}/to/pdf?Secret=${secret}`;
-    console.log(`Converting ${file.originalFilename} using: ${url}`);
-
     const response = await axios.post(url, formData, {
       headers: {
         ...formData.getHeaders(),
@@ -52,7 +60,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       maxContentLength: Infinity,
       maxBodyLength: Infinity,
     });
-    console.log('ConvertAPI full response:', response.data);
 
     const downloadUrl = response.data.Files?.[0]?.Url;
     if (!downloadUrl) throw new Error('No file URL returned by ConvertAPI.');
@@ -63,6 +70,4 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     console.error('ConvertAPI error:', error?.response?.data || error);
     res.status(500).json({ error: errMsg });
   }
-  
-  }
-
+}

@@ -132,7 +132,7 @@ export default function Home() {
       const error = await response.text();
       console.error('Conversion failed:', error);
       throw new Error('Conversion failed');
-      return;
+   
     }
  
     const blob = await response.blob();
