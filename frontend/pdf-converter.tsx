@@ -6,7 +6,7 @@ import { FileText, Presentation, Upload, UploadIcon, DownloadIcon, CheckCircle, 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
-import { UploadedFile } from '@/app/types'; // adjust path as needed
+import { UploadedFile } from '@/app/types'; 
 
 
 
@@ -134,6 +134,7 @@ export default function Home() {
       throw new Error('Conversion failed');
       return;
     }
+ 
     const blob = await response.blob();
     const link = document.createElement('a');
     const url = URL.createObjectURL(blob);
