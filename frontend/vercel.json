@@ -1,0 +1,12 @@
+{
+    "projects": {
+      "frontend": {
+        "src": "frontend"
+      }
+    },
+    "rewrites": [
+      { "source": "/api/:match*", "destination": "/api/:match*" },
+      { "source": "/(.*)", "destination": "/frontend/$1" }
+    ]
+  }
+  
